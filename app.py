@@ -68,15 +68,24 @@ def _load_case_volumes(image_path: str, layer_items: tuple[tuple[str, str], ...]
     """Loads exactly one case's image + available overlay layers.
     max_entries=1: keep only the current case's raw volumes in memory.
     Combined with the scrub-stack cache (also max_entries=1) this bounds
-    memory to roughly one case's worth at a time, since this machine
-    tends to run low on free RAM."""
+    memory to roughly one case's worth at a time.
+
+    dtype choices matter a lot here — a full-size case at float32/int32
+    is ~550MB just for the two raw arrays, which is enough on its own to
+    trip a memory limit (this machine's, or a hosted free tier's). int16
+    for the image (measured -1000..3500 HU, fits easily, and the display
+    path already quantizes to 256 levels across a ~3000 HU window — a
+    <1 HU rounding difference from int16 is invisible at that scale) and
+    uint8 for labels (matches the *original on-disk dtype* exactly — IDs
+    only run 0-148 — this was pure unnecessary widening before, not a
+    tradeoff) cut that to ~206MB."""
     cfg = _load_config()
     kind_by_key = {l["key"]: l["kind"] for l in cfg["layers"]}
 
-    image_vol = nifti_utils.load_volume(_resolve_path(image_path), dtype=np.float32)
+    image_vol = nifti_utils.load_volume(_resolve_path(image_path), dtype=np.int16)
     layers, errors = {}, {}
     for key, path in layer_items:
-        dtype = np.int32 if kind_by_key.get(key) == "label_map" else np.float32
+        dtype = np.uint8 if kind_by_key.get(key) == "label_map" else np.int16
         vol = nifti_utils.load_volume(_resolve_path(path), dtype=dtype)
         err = nifti_utils.check_alignment(image_vol, vol)
         if err:
@@ -90,8 +99,11 @@ def _load_case_volumes(image_path: str, layer_items: tuple[tuple[str, str], ...]
 def _label_ids_in_volume(path: str) -> list[int]:
     """All label IDs present anywhere in a segmentation volume — used for
     a stable "what's in this case" legend, rather than recomputing (and
-    losing, once slice position moved client-side) a per-slice one."""
-    vol = nifti_utils.load_volume(_resolve_path(path), dtype=np.int32)
+    losing, once slice position moved client-side) a per-slice one.
+    Only the small returned ID list is cached (Streamlit caches return
+    values, not locals), but uint8 still matters for the peak memory
+    this function touches while it runs — see _load_case_volumes."""
+    vol = nifti_utils.load_volume(_resolve_path(path), dtype=np.uint8)
     return sorted(int(i) for i in np.unique(vol.data) if i != 0)
 
 

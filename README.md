@@ -293,13 +293,20 @@ coordinates rather than a mask:
 
 ## Performance notes
 
-- Each CBCT volume is ~100+ MB in memory; `@st.cache_data(max_entries=2)`
-  keeps at most the current + previous case loaded, never the whole
-  dataset.
+- A full-size case's raw arrays measured at **~206MB in memory**
+  (image + segmentation together) — down from an initial ~549MB at
+  float32/int32, cut by loading image as `int16` and labels as `uint8`
+  instead (see the docstring on `_load_case_volumes` in `app.py` for
+  the reasoning — this was a real fix for repeated hard crashes on a
+  memory-constrained hosted deploy, not just a nice-to-have). Plus the
+  scrub-stack cache on top (tens of MB, bounded by `scrub_radius`).
+  `@st.cache_data(max_entries=1)` on both keeps only the current case in
+  memory, never the whole dataset — deliberately 1, not more, given how
+  tight this can get.
 - NIfTI reads go through `nibabel`'s standard loader (not a memory-mapped
   partial read) — for `.nii.gz` this means a full per-case decompress on
-  first load of that case, which is what the max-2-entry cache is there
-  to amortize across slice/opacity/window tweaks on the same case.
+  first load of that case, which is what the cache is there to amortize
+  across slice/opacity/window tweaks on the same case.
 
 ## Known limitations (honest, not hidden)
 

@@ -298,12 +298,18 @@ def test_real_case_loads_and_aligns():
     cases = {c.case_id: c for c in data_loader.discover_cases(cfg)}
     case = cases["ToothFairy3F_001"]
 
-    image_vol = nifti_utils.load_volume(case.image_path, dtype=np.float32)
-    label_vol = nifti_utils.load_volume(case.layer_paths["segmentation"], dtype=np.int32)
+    # int16/uint8, not float32/int32 — matches what app.py actually loads
+    # with in production (memory: a full-size case is ~550MB at
+    # float32/int32 vs ~206MB here, which matters on a constrained host)
+    image_vol = nifti_utils.load_volume(case.image_path, dtype=np.int16)
+    label_vol = nifti_utils.load_volume(case.layer_paths["segmentation"], dtype=np.uint8)
 
     assert image_vol.data.shape == label_vol.data.shape
     err = nifti_utils.check_alignment(image_vol, label_vol)
     assert err is None, err
+    # int16 rounds fractional HU values — confirm it didn't wreck the data
+    assert -1500 < image_vol.data.min() and image_vol.data.max() < 5000
+    assert label_vol.data.max() <= 148  # highest real ID (pulps); confirms no uint8 wraparound
 
     # every declared view plane should yield a sensible slice count / slice
     for plane in ("axial", "coronal", "sagittal"):
