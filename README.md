@@ -199,22 +199,30 @@ Setup:
 2. Add `[huggingface]` to secrets (locally and/or in the hosted app's
    Settings → Secrets) — see `.streamlit/secrets.toml.example`.
 
-**Upload status:** the 28GB dataset is being pushed to a private repo,
-`vvyern/toothfairy3-mamba-dent-hitl`, via `upload_large_folder` (resumable
-— safe to interrupt/retry). First attempt crashed with native
-out-of-memory errors inside `hf_xet` (HF's Rust chunked-transfer backend)
-running 4 parallel workers on this RAM-constrained machine; retried with
-`HF_HUB_DISABLE_XET=1` and `num_workers=1` — slower, but stable. If this
-ever needs re-running, keep those two settings; don't just crank workers
-back up.
+**Upload status: complete.** All 532 image files + 532 label files +
+`dataset.json` confirmed present in the private repo
+`vvyern/toothfairy3-mamba-dent-hitl` via `upload_large_folder` (resumable
+— it was interrupted twice along the way, see below, and resumed
+correctly each time without re-uploading already-committed files). First
+attempt crashed with native out-of-memory errors inside `hf_xet` (HF's
+Rust chunked-transfer backend) running 4 parallel workers on this
+RAM-constrained machine; resumed with `HF_HUB_DISABLE_XET=1` and
+`num_workers=1` — slower, but stable. If this ever needs re-running for
+a dataset update, keep those two settings; don't just crank workers back
+up.
 
-**Honest caveat:** the *file-matching logic* in `hf_data_source.py`
-(regex, case ID extraction, layer-path resolution) is unit-tested against
-a mocked file listing. The actual `hf_hub_download` fetch-and-load path
-has **not** been exercised end-to-end yet — the upload wasn't finished at
-the time this was written. Verify it once the upload completes (open a
-case in the deployed or a locally-secrets-configured app, confirm it
-loads and displays correctly) before trusting it for real review.
+**Live-verified end-to-end**, not just unit-tested against a mock:
+`discover_cases` against the real Hub API found all 532 cases correctly;
+`resolve_local_path` really downloaded a case's image + label files;
+`nifti_utils.load_volume` loaded them correctly (370×370×164, 0.3mm iso —
+matches the local-mode format); the alignment check passed; `slice_count`
+/`get_slice` worked across the loaded volume; and `load_label_names`
+correctly pulled all 78 classes from the Hub-hosted `dataset.json`. This
+was checked against `ToothFairy3S_0000` specifically (a small case, to
+stay within this machine's tight free RAM during the check) — a full-size
+case (~100-200MB) uses the identical code path, just more memory per
+load, which is exactly what `max_entries=1` caching on `_load_case_volumes`
+exists to bound.
 
 ## `validation_results.csv` schema
 
@@ -261,10 +269,10 @@ coordinates rather than a mask:
 - The same write-scoped HF token was reused for the deployed app's read
   access rather than generating a separate read-only one — tighter to
   scope down later, not a blocker now for a private single-owner repo.
-- `src/hf_data_source.py`'s actual `hf_hub_download` fetch-and-load path
-  is unverified end-to-end (the upload wasn't finished yet) — see
-  "Hosting" above for what *is* verified (the file-matching logic) vs.
-  what still needs a real check.
+- The Hub-mode load path was live-verified against a small case
+  (`ToothFairy3S_0000`, ~370×370×164) to keep the check within this
+  machine's tight free RAM — not yet against a full-size (~512×512×260,
+  100-200MB) case specifically, though it's the identical code path.
 
 ## Tests
 
