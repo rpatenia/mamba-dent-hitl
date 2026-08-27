@@ -1,0 +1,11 @@
+streamlit>=1.55
+nibabel>=5.4
+numpy>=2.0
+plotly>=7.0
+pandas>=2.2
+PyYAML>=6.0
+pytest>=8.0
+Pillow>=11.0
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
+huggingface_hub>=0.24

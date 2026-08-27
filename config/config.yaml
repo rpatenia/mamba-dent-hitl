@@ -1,0 +1,72 @@
+# Mamba-Dent HITL viewer configuration.
+#
+# MVP SCOPE (see README): only the "segmentation" layer is wired up today,
+# because it's the only per-case label file that actually exists on disk.
+# The "apex" and "nerve_centerline" layers are declared but inert — once
+# Mamba-Dent's aux-label generation (data_utils.py) produces real files,
+# fill in their `dir` + `suffix` here and the viewer will pick them up
+# with no code changes. Until then the loader silently skips any layer
+# whose `dir` is null.
+
+data:
+  # Local-disk mode (default — used whenever no [huggingface] secrets
+  # section is present, e.g. local dev on a machine with the dataset).
+  root: "C:/Users/Ryan/Desktop/ToothFairy3"
+  dataset_json: "C:/Users/Ryan/Desktop/ToothFairy3/dataset.json"
+  # Case discovery: every file in images_dir matching image_pattern defines
+  # one case. {case_id} is extracted from the regex capture group. Also
+  # used by src/hf_data_source.py in Hub mode, against repo-relative paths.
+  images_dir: "imagesTr"
+  image_pattern: "^(?P<case_id>.+)_0000\\.nii\\.gz$"
+  # Hub mode (used instead of the above whenever [huggingface] secrets
+  # are present — see secrets.toml.example): repo_id/token live in
+  # secrets, not here, since they're deployment-specific. This is just
+  # the in-repo path to the same dataset.json used in local mode.
+  dataset_json_rel: "dataset.json"
+
+layers:
+  - key: segmentation
+    label: "Segmentation (78-class)"
+    kind: label_map          # categorical: one integer ID per voxel
+    dir: "labelsTr"
+    suffix: ".nii.gz"        # labelsTr/{case_id}.nii.gz
+    enabled_by_default: true
+    reviewable: true          # shows up as a label_type in the PASS/REJECT UI
+
+  - key: apex
+    label: "Tooth Apex Points"
+    kind: label_map           # placeholder — confirm actual encoding once generated
+    dir: null                 # e.g. "auxTr/apex" once it exists
+    suffix: "_apex.nii.gz"
+    enabled_by_default: false
+    reviewable: true
+
+  - key: nerve_centerline
+    label: "Nerve Centerline"
+    kind: label_map
+    dir: null                 # e.g. "auxTr/nerve" once it exists
+    suffix: "_nerve.nii.gz"
+    enabled_by_default: false
+    reviewable: true
+
+results:
+  csv_path: "results/validation_results.csv"
+
+review:
+  # Single-reviewer setup — no reviewer-ID prompt in the UI. Change this
+  # if a second person ever reviews too (each still gets their own
+  # decisions logged; nothing else in the app needs to change).
+  reviewer_id: "reviewer"
+
+display:
+  # Default CBCT window/level (Hounsfield-ish units; this dataset's raw
+  # intensity range was measured at roughly -1000..3500). Bone-ish default.
+  default_window_center: 1200
+  default_window_width: 3000
+  # How many slices on each side of the current position to pre-render for
+  # smooth client-side scrubbing (a Plotly animation-frame slider, not a
+  # Streamlit widget — dragging within this window never round-trips to
+  # the server). Bigger = smoother range before a rebuild is needed, but
+  # more RAM/time per rebuild — measured ~1.5s / ~9MB at radius 20 on a
+  # 512x512 case. Keep modest; this machine runs low on free RAM.
+  scrub_radius: 20
