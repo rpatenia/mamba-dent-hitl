@@ -54,13 +54,20 @@ def _label_colors():
     return data_loader.build_label_colors(list(_label_names().keys()))
 
 
-def _resolve_path(path: str) -> str:
+def _load_one_volume(path: str, dtype):
     """A Case's image_path/layer_paths hold either a real local path
-    (local-disk mode) or a repo-relative path (Hugging Face Hub mode) —
-    this makes every downstream nibabel load agnostic to which."""
+    (local-disk mode) or a repo-relative path (Hugging Face Hub mode).
+    In Hub mode, the downloaded file is deleted right after nibabel
+    reads it into memory — otherwise every case ever viewed this session
+    stays on disk forever, which on a hosted container with a
+    memory-backed filesystem is effectively an unbounded memory leak on
+    top of the in-memory volume cache (see _load_case_volumes)."""
     if hf_data_source.is_configured():
-        return hf_data_source.resolve_local_path(path)
-    return path
+        local_path = hf_data_source.resolve_local_path(path)
+        vol = nifti_utils.load_volume(local_path, dtype=dtype)
+        hf_data_source.cleanup_local_path(local_path)
+        return vol
+    return nifti_utils.load_volume(path, dtype=dtype)
 
 
 @st.cache_data(show_spinner="Loading case...", max_entries=1)
@@ -82,11 +89,11 @@ def _load_case_volumes(image_path: str, layer_items: tuple[tuple[str, str], ...]
     cfg = _load_config()
     kind_by_key = {l["key"]: l["kind"] for l in cfg["layers"]}
 
-    image_vol = nifti_utils.load_volume(_resolve_path(image_path), dtype=np.int16)
+    image_vol = _load_one_volume(image_path, dtype=np.int16)
     layers, errors = {}, {}
     for key, path in layer_items:
         dtype = np.uint8 if kind_by_key.get(key) == "label_map" else np.int16
-        vol = nifti_utils.load_volume(_resolve_path(path), dtype=dtype)
+        vol = _load_one_volume(path, dtype=dtype)
         err = nifti_utils.check_alignment(image_vol, vol)
         if err:
             errors[key] = err
@@ -103,7 +110,7 @@ def _label_ids_in_volume(path: str) -> list[int]:
     Only the small returned ID list is cached (Streamlit caches return
     values, not locals), but uint8 still matters for the peak memory
     this function touches while it runs — see _load_case_volumes."""
-    vol = nifti_utils.load_volume(_resolve_path(path), dtype=np.uint8)
+    vol = _load_one_volume(path, dtype=np.uint8)
     return sorted(int(i) for i in np.unique(vol.data) if i != 0)
 
 

@@ -263,14 +263,26 @@ a throwaway venv, installed them, ran the full test suite against
 it (18/18 pass) — confirms pandas 3.0's API changes don't break
 `validation.py`, not just that install succeeds.
 
-**Still open:** whether this actually fixes the original runtime crash
-(vs. just being a correct dependency pin) isn't confirmed yet — that
-needs a real redeploy + a period of use to see if it recurs. `runtime.txt`
-is left in place (harmless) but nothing here depends on it actually
-working. If a hard-crash-no-log happens again after this, check actual
-resource usage next (Community Cloud's free tier has real memory limits,
-and this app's per-case CBCT loading is genuinely memory-heavy) rather
-than re-suspecting dependency versions a third time.
+**Update: dependency pins fixed the build, but not the crash-loop.** App
+started reliably after this, but kept dying after some active use ("works,
+then crashes after a while, every time, need to reboot") — same zero-log
+signature as before, which confirmed it was never a dependency problem
+in the first place. Real cause turned out to be memory, in two parts:
+
+1. Raw per-case arrays were ~549MB (float32 image + int32 label) —
+   fixed by loading as int16/uint8 instead, ~206MB. See
+   `_load_case_volumes`'s docstring in `app.py`.
+2. Hub-mode downloads accumulated on disk with nothing ever deleting
+   them — every case ever viewed in a session stayed downloaded forever.
+   On a container whose writable filesystem may be memory-backed, that's
+   effectively an unbounded second memory leak riding on top of the
+   first. Fixed: downloads now go to a dedicated directory and get
+   deleted immediately after being read into memory — live-verified
+   (download → confirm exists → load → confirm gone, data still correct).
+
+`runtime.txt` is left in place (harmless) but nothing here depends on it
+actually working — it never appeared to take effect on a reboot of an
+existing app.
 
 ## `validation_results.csv` schema
 
@@ -317,10 +329,12 @@ coordinates rather than a mask:
   stop being purely per case+label_type).
 - No point-drag correction editor (per spec, out of scope for v1) —
   `NEEDS_CORRECTION` + a note is the mechanism for now.
-- `hf_hub_download`'s local cache (Hub dataset mode) isn't bounded —
-  a long session touching many different cases accumulates disk use on
-  the host with nothing evicting it. Watch for this if the hosted app's
-  disk fills up; not addressed yet.
+- ~~`hf_hub_download`'s local cache isn't bounded~~ — fixed: Hub-mode
+  downloads now go to a dedicated `local_dir` (not the shared global
+  cache) and get deleted immediately after their content is read into
+  memory. Live-verified: downloaded a real file, confirmed it existed,
+  loaded it, confirmed the file was gone afterward and the in-memory data
+  was still correct.
 - The same write-scoped HF token was reused for the deployed app's read
   access rather than generating a separate read-only one — tighter to
   scope down later, not a blocker now for a private single-owner repo.
