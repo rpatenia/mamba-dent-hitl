@@ -224,6 +224,32 @@ case (~100-200MB) uses the identical code path, just more memory per
 load, which is exactly what `max_entries=1` caching on `_load_case_volumes`
 exists to bound.
 
+### Troubleshooting: hard crash, no traceback, blank "Oh no." page
+
+Hit this on first real deploy. Streamlit's generic "Oh no. Error running
+app." page (not a normal Python traceback box) means the process died
+hard enough that Streamlit itself never got to log a catchable
+exception — consistent with an OS-level OOM kill or a native-extension
+crash. The logs showed nothing at all past `Uvicorn server started`,
+which is the signature of exactly that (a graceful Python error would
+have logged *something*).
+
+Root cause found: `requirements.txt` used loose `>=` bounds, so the
+host pulled whatever was newest at deploy time — **Python 3.14** (vs.
+the 3.12 this was built and tested against) and **pandas 3.0.5** (a
+major-version jump from the tested 2.2.3), among others. Streamlit's own
+build log even showed it patching around a known pyarrow segfault
+specific to that Python 3.14 environment — a sign the environment itself
+was bleeding-edge enough to have live compatibility issues.
+
+Fixed by: `runtime.txt` (`python-3.12`) to pin the Python version, and
+`requirements.txt` now pins every package to the exact version verified
+locally rather than a loose lower bound. If a similar hard-crash-no-log
+happens again after this, it's probably not this — check actual resource
+usage (Community Cloud's free tier has real memory limits, and this
+app's per-case CBCT loading is genuinely memory-heavy) rather than
+re-suspecting dependency versions.
+
 ## `validation_results.csv` schema
 
 ```

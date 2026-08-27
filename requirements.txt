@@ -1,11 +1,17 @@
-streamlit>=1.55
-nibabel>=5.4
-numpy>=2.0
-plotly>=7.0
-pandas>=2.2
-PyYAML>=6.0
-pytest>=8.0
-Pillow>=11.0
-sqlalchemy>=2.0
-psycopg2-binary>=2.9
-huggingface_hub>=0.24
+# Pinned to exact versions verified locally (Python 3.12) — the app was
+# tested against these specifically, not just "whatever's newest." A
+# hosted deploy without runtime.txt pinning Python pulled Python 3.14 +
+# pandas 3.0.5 (a major bump from what's tested here) and crashed with
+# no traceback at all (OS-level kill / native-extension issue) — see
+# README "Hosting" > troubleshooting.
+streamlit==1.55.0
+nibabel==5.4.2
+numpy==2.1.3
+plotly==7.0.0
+pandas==2.2.3
+PyYAML==6.0.3
+pytest==9.0.2
+Pillow==11.0.0
+sqlalchemy==2.0.52
+psycopg2-binary==2.9.12
+huggingface_hub==1.7.2
