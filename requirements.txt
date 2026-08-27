@@ -1,17 +1,19 @@
-# Pinned to exact versions verified locally (Python 3.12) — the app was
-# tested against these specifically, not just "whatever's newest." A
-# hosted deploy without runtime.txt pinning Python pulled Python 3.14 +
-# pandas 3.0.5 (a major bump from what's tested here) and crashed with
-# no traceback at all (OS-level kill / native-extension issue) — see
-# README "Hosting" > troubleshooting.
-streamlit==1.55.0
+# Pinned to versions CONFIRMED to install successfully on Streamlit
+# Community Cloud's actual environment (Python 3.14 — runtime.txt did
+# not override this, at least not on a reboot of an existing app).
+# Do NOT "fix" this by pinning to older versions tested locally on
+# Python 3.12 — several (pillow 11.0.0, numpy 2.1.3) have no prebuilt
+# wheel for 3.14 and fail trying to compile from source (missing zlib
+# headers, etc.). These exact versions are taken from a deploy log that
+# genuinely reached "Uvicorn server started" with no install errors.
+streamlit==1.62.0
 nibabel==5.4.2
-numpy==2.1.3
+numpy==2.5.2
 plotly==7.0.0
-pandas==2.2.3
+pandas==3.0.5
 PyYAML==6.0.3
-pytest==9.0.2
-Pillow==11.0.0
+pytest==9.1.1
+Pillow==12.3.0
 sqlalchemy==2.0.52
 psycopg2-binary==2.9.12
-huggingface_hub==1.7.2
+huggingface_hub==1.28.0

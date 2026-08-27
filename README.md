@@ -234,21 +234,43 @@ crash. The logs showed nothing at all past `Uvicorn server started`,
 which is the signature of exactly that (a graceful Python error would
 have logged *something*).
 
-Root cause found: `requirements.txt` used loose `>=` bounds, so the
-host pulled whatever was newest at deploy time — **Python 3.14** (vs.
-the 3.12 this was built and tested against) and **pandas 3.0.5** (a
-major-version jump from the tested 2.2.3), among others. Streamlit's own
-build log even showed it patching around a known pyarrow segfault
-specific to that Python 3.14 environment — a sign the environment itself
-was bleeding-edge enough to have live compatibility issues.
+Root cause suspected (not fully confirmed — see below): `requirements.txt`
+used loose `>=` bounds, so the host pulled whatever was newest at deploy
+time — **Python 3.14** (vs. the 3.12 this was built and tested against)
+and **pandas 3.0.5** (a major-version jump from the tested 2.2.3), among
+others. Streamlit's own build log even showed it patching around a known
+pyarrow segfault specific to that Python 3.14 environment — a sign the
+platform itself has live compatibility rough edges right now.
 
-Fixed by: `runtime.txt` (`python-3.12`) to pin the Python version, and
-`requirements.txt` now pins every package to the exact version verified
-locally rather than a loose lower bound. If a similar hard-crash-no-log
-happens again after this, it's probably not this — check actual resource
-usage (Community Cloud's free tier has real memory limits, and this
-app's per-case CBCT loading is genuinely memory-heavy) rather than
-re-suspecting dependency versions.
+**First fix attempt was wrong, worth recording why:** added `runtime.txt`
+(`python-3.12`) and pinned every package to the exact *older* version
+tested locally. `runtime.txt` had no effect — the next build still showed
+Python 3.14 (possibly only read on an app's *initial* creation, not a
+reboot of an existing one — untested). Worse, the old pins actively broke
+the build: `pillow==11.0.0` and `numpy==2.1.3` predate Python 3.14 and
+have no prebuilt wheel for it, so pip tried to compile Pillow from source
+and hard-failed on missing `zlib` headers. That's a strictly worse
+failure mode (build never completes) than the original (builds fine,
+crashes after starting).
+
+**Actual fix:** pin `requirements.txt` to the exact versions confirmed to
+already install successfully in the real target environment (lifted
+directly from a deploy log that reached `Uvicorn server started` cleanly
+— streamlit 1.62.0, numpy 2.5.2, pandas 3.0.5, pillow 12.3.0,
+huggingface_hub 1.28.0, etc.), rather than forcing older local-tested
+versions. Verified these exact pins locally before pushing again: built
+a throwaway venv, installed them, ran the full test suite against
+it (18/18 pass) — confirms pandas 3.0's API changes don't break
+`validation.py`, not just that install succeeds.
+
+**Still open:** whether this actually fixes the original runtime crash
+(vs. just being a correct dependency pin) isn't confirmed yet — that
+needs a real redeploy + a period of use to see if it recurs. `runtime.txt`
+is left in place (harmless) but nothing here depends on it actually
+working. If a hard-crash-no-log happens again after this, check actual
+resource usage next (Community Cloud's free tier has real memory limits,
+and this app's per-case CBCT loading is genuinely memory-heavy) rather
+than re-suspecting dependency versions a third time.
 
 ## `validation_results.csv` schema
 
